@@ -1,0 +1,14 @@
+# Environment variables
+.env
+
+# Configuration and local state
+config.json
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# IDE / Tool specific
+.gemini/
+.vscode/
+.idea/
