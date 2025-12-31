@@ -5,6 +5,8 @@ from discord.ext import commands
 from discord import app_commands, ui
 from dotenv import load_dotenv
 
+from keep_alive import server_on
+
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
 CONFIG_FILE = 'config.json'
@@ -115,6 +117,8 @@ async def set_verify_role(interaction: discord.Interaction, role: discord.Role):
     config['verify_role_id'] = role.id
     save_config(config)
     await interaction.response.send_message(f"ตั้งค่ายศเป็น {role.mention} เรียบร้อยแล้ว", ephemeral=True)
+
+server_on()
 
 if __name__ == "__main__":
 
