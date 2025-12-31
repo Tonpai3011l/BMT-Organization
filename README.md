@@ -1,4 +1,4 @@
-# BMT Discord Bot
+# BMT Organization Bot
 
 ระบบลงทะเบียน Discord bot พื้นฐานที่มาพร้อมกับระบบให้ยศ (Role) อัตโนมัติและระบบบันทึก Log การใช้งาน
 
