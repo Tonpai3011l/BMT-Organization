@@ -92,39 +92,6 @@ class MyBot(commands.Bot):
 
 bot = MyBot()
 
-@bot.event
-async def on_raw_reaction_add(payload):
-    if payload.user_id == bot.user.id: return
-
-    guild = bot.get_guild(payload.guild_id)
-    channel = bot.get_channel(payload.channel_id)
-    message = await channel.fetch_message(payload.message_id)
-
-    if message.embeds:
-        footer_text = message.embeds[0].footer.text
-        if footer_text and "Role ID:" in footer_text:
-            role_id = int(footer_text.split("Role ID: ")[1].split(" |")[0])
-            role = guild.get_role(role_id)
-            member = guild.get_member(payload.user_id)
-            if role and member:
-                await member.add_roles(role)
-
-# --- 3. ส่วนตรวจจับการเอาอิโมจิออก (ถอนยศ) ---
-@bot.event
-async def on_raw_reaction_remove(payload):
-    guild = bot.get_guild(payload.guild_id)
-    channel = bot.get_channel(payload.channel_id)
-    message = await channel.fetch_message(payload.message_id)
-    
-    if message.embeds:
-        footer_text = message.embeds[0].footer.text
-        if footer_text and "Role ID:" in footer_text:
-            role_id = int(footer_text.split("Role ID: ")[1].split(" |")[0])
-            role = guild.get_role(role_id)
-            member = guild.get_member(payload.user_id)
-            if role and member:
-                await member.remove_roles(role)
-
 @bot.tree.command(name="setup", description="ส่งปุ่มลงทะเบียนไปยังห้องที่กำหนด")
 @app_commands.describe(channel="ห้องที่ต้องการส่งปุ่ม")
 async def setup(interaction: discord.Interaction, channel: discord.TextChannel):
@@ -151,36 +118,6 @@ async def set_verify_role(interaction: discord.Interaction, role: discord.Role):
     config['verify_role_id'] = role.id
     save_config(config)
     await interaction.response.send_message(f"ตั้งค่ายศเป็น {role.mention} เรียบร้อยแล้ว", ephemeral=True)
-
-@bot.tree.command(name="setup_rolegiver", description="ส่งระบบรับยศเพิ่มเติม")
-@app_commands.describe(role="ยศที่ต้องการจะให้", emoji="อิโมจิที่ต้องการ")
-async def setup_rolegiver(interaction: discord.Interaction, role: discord.Role, emoji: str):
-    if not interaction.user.guild_permissions.administrator:
-        return await interaction.response.send_message("❌ เฉพาะผู้ดูแลเท่านั้นที่ใช้งานได้", ephemeral=True)
-
-    embed = discord.Embed(
-        title="📝 ระบบรับยศเพิ่มเติม",
-        description=(
-            f"ยินดีต้อนรับสู่ระบบจัดการยศเอง **{interaction.guild.name}**\n\n"
-            f"ขณะนี้คุณสามารถรับยศ: {role.mention} ได้ด้วยตนเอง\n"
-            "-------------------------------------------\n"
-            f"📑 **วิธีการ:** กดอิโมจิ {emoji} ด้านล่างนี้\n"
-            "📊 **สถานะ** กดเพื่อรับยศ / กดเพื่อถอนยศ\n"
-            "-------------------------------------------\n"
-        ),
-        color=0x2b2d31
-    )
-    embed.set_thumbnail(url=interaction.guild.icon.url if interaction.guild.icon else None)
-    embed.set_footer(text=f"Role ID: {role.id} | พัฒนาโดย BMT-Organization")
-
-    await interaction.response.send_message(f"✅ ส่งระบบรับยศ {role.name} เรียบร้อยแล้ว!", ephemeral=True)
-
-    message = await interaction.channel.send(embed=embed)
-
-    try:
-        await interaction.add_reactioh(emoji)
-    except:
-        await interaction.followup.send("⚠️ บอทไม่สามารถใส่อิโมจิได้ โปรดใช้อิโมจิมาตรฐานหรืออิโมจิจากเซิร์ฟเวอร์นี้", ephemeral=True)
 
 server_on()
 
