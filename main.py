@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 
 from keep_alive import server_on
 
+
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
 CONFIG_FILE = 'config.json'
@@ -72,7 +73,6 @@ class MyBot(commands.Bot):
         intents = discord.Intents.default()
         intents.message_content = True
         intents.members = True
-        intents.reactions = True
         
         super().__init__(
             command_prefix='.',
@@ -89,6 +89,56 @@ class MyBot(commands.Bot):
 
     async def on_ready(self):
         pass
+
+    async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
+        if payload.user_id == self.user.id:
+            return
+
+        config = load_config()
+        if payload.message_id != config.get('rolegiver_message_id'):
+            return
+
+        roles_mapping = config.get('rolegiver_roles', {})
+        emoji_str = str(payload.emoji)
+        
+        if emoji_str in roles_mapping:
+            guild = self.get_guild(payload.guild_id)
+            if not guild: return
+            
+            role = guild.get_role(int(roles_mapping[emoji_str]))
+            if not role: return
+            
+            member = guild.get_member(payload.user_id)
+            if not member: return
+            
+            try:
+                await member.add_roles(role)
+            except discord.Forbidden:
+                print(f"Failed to add role {role.name} to {member.name} (Forbidden)")
+
+    async def on_raw_reaction_remove(self, payload: discord.RawReactionActionEvent):
+        config = load_config()
+        if payload.message_id != config.get('rolegiver_message_id'):
+            return
+
+        roles_mapping = config.get('rolegiver_roles', {})
+        emoji_str = str(payload.emoji)
+        
+        if emoji_str in roles_mapping:
+            guild = self.get_guild(payload.guild_id)
+            if not guild: return
+            
+            role = guild.get_role(int(roles_mapping[emoji_str]))
+            if not role: return
+            
+            member = guild.get_member(payload.user_id)
+            if not member: return
+            
+            try:
+                await member.remove_roles(role)
+            except discord.Forbidden:
+                print(f"Failed to remove role {role.name} from {member.name} (Forbidden)")
+
 
 bot = MyBot()
 
@@ -118,6 +168,84 @@ async def set_verify_role(interaction: discord.Interaction, role: discord.Role):
     config['verify_role_id'] = role.id
     save_config(config)
     await interaction.response.send_message(f"ตั้งค่ายศเป็น {role.mention} เรียบร้อยแล้ว", ephemeral=True)
+
+@bot.tree.command(name="setup_rolegiver", description="ส่ง Embed สำหรับเลือกยศ (Role Giver)")
+@app_commands.describe(channel="ห้องที่ต้องการให้ส่ง Embed เลือกยศ")
+async def setup_rolegiver(interaction: discord.Interaction, channel: discord.TextChannel):
+    embed = discord.Embed(
+        title="เลือกยศที่ต้องการ",
+        description="คลิกเลือก Emoji ด้านล่างเพื่อรับยศที่คุณต้องการ",
+        color=discord.Color.orange()
+    )
+    msg = await channel.send(embed=embed)
+    
+    config = load_config()
+    config['rolegiver_message_id'] = msg.id
+    config['rolegiver_channel_id'] = channel.id
+    if 'rolegiver_roles' not in config:
+        config['rolegiver_roles'] = {}
+    save_config(config)
+    
+    await interaction.response.send_message(f"สร้างระบบให้ยศใน {channel.mention} เรียบร้อยแล้ว (ID: {msg.id})", ephemeral=True)
+
+@bot.tree.command(name="add", description="เพิ่ม Emoji และ Role สำหรับระบบเลือกยศ")
+@app_commands.describe(emoji="Emoji ที่ต้องการใช้", role="ยศที่ต้องการมอบให้")
+async def add_role_giver(interaction: discord.Interaction, emoji: str, role: discord.Role):
+    config = load_config()
+    msg_id = config.get('rolegiver_message_id')
+    channel_id = config.get('rolegiver_channel_id')
+    
+    if not msg_id or not channel_id:
+        return await interaction.response.send_message("กรุณาใช้คำสั่ง /setup_rolegiver ก่อน", ephemeral=True)
+    
+    channel = bot.get_channel(channel_id)
+    if not channel:
+        return await interaction.response.send_message("ไม่พบห้องที่ตั้งค่าไว้", ephemeral=True)
+    
+    try:
+        msg = await channel.fetch_message(msg_id)
+    except Exception:
+        return await interaction.response.send_message("ไม่พบข้อความเลือกยศ (อาจถูกลบไปแล้ว)", ephemeral=True)
+    
+    try:
+        await msg.add_reaction(emoji)
+    except Exception:
+        return await interaction.response.send_message("ไม่สามารถเพิ่ม Emoji นี้ได้ (บอทอาจไม่มีสิทธิ์หรือ Emoji ไม่ถูกต้อง)", ephemeral=True)
+    
+    if 'rolegiver_roles' not in config:
+        config['rolegiver_roles'] = {}
+    
+    config['rolegiver_roles'][emoji] = role.id
+    save_config(config)
+    
+    await interaction.response.send_message(f"เพิ่ม Emoji {emoji} สำหรับยศ {role.name} เรียบร้อยแล้ว", ephemeral=True)
+
+@bot.tree.command(name="remove", description="ลบ Emoji และ Role ออกจากระบบเลือกยศ")
+@app_commands.describe(emoji="Emoji ที่ต้องการลบออก")
+async def remove_role_giver(interaction: discord.Interaction, emoji: str):
+    config = load_config()
+    roles_mapping = config.get('rolegiver_roles', {})
+    
+    if emoji not in roles_mapping:
+        return await interaction.response.send_message("ไม่มีการตั้งค่า Emoji นี้ไว้ในระบบ", ephemeral=True)
+    
+    del roles_mapping[emoji]
+    save_config(config)
+    
+    # Try to remove reaction from message
+    msg_id = config.get('rolegiver_message_id')
+    channel_id = config.get('rolegiver_channel_id')
+    if msg_id and channel_id:
+        channel = bot.get_channel(channel_id)
+        if channel:
+            try:
+                msg = await channel.fetch_message(msg_id)
+                await msg.clear_reaction(emoji)
+            except Exception:
+                pass # Ignore if fail to clear reaction
+    
+    await interaction.response.send_message(f"ลบ Emoji {emoji} ออกจากระบบเรียบร้อยแล้ว", ephemeral=True)
+
 
 server_on()
 
